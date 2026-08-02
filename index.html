@@ -190,6 +190,22 @@
       </div>
     </div>
 
+    <div style="margin-bottom:28px">
+      <div class="obj-header">
+        <p class="section-title" style="margin:0">Limites de gastos</p>
+        <button id="novoLimiteBtn">+ Novo</button>
+      </div>
+      <div id="novoLimiteForm" style="display:none;background:var(--surface-1);border:1px solid var(--border);border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end">
+          <div><label style="font-size:11px;color:var(--text-muted)">Nome</label><input id="lNome" placeholder="Ex: iFood"></div>
+          <div><label style="font-size:11px;color:var(--text-muted)">Categoria ou palavra-chave</label><input id="lTermo" placeholder="Ex: ifood, Lazer, Mercado"></div>
+          <div><label style="font-size:11px;color:var(--text-muted)">Limite mensal</label><input id="lLimite" placeholder="R$ 0,00"></div>
+          <button id="salvarLimiteBtn">Salvar</button>
+        </div>
+      </div>
+      <div class="kpi-grid" id="limitesList"></div>
+    </div>
+
     <div class="main-grid">
       <div>
         <p class="section-title">Médio prazo — por categoria</p>
@@ -368,6 +384,7 @@ function render() {
   }
 
   renderObjetivos();
+  renderLimites();
 }
 
 /* ------------------------------ OBJETIVOS (localStorage por enquanto) ------------------------------ */
@@ -445,6 +462,64 @@ document.getElementById('salvarObjBtn').onclick = () => {
   document.getElementById('oMeta').value = '';
   document.getElementById('novoObjForm').style.display = 'none';
   renderObjetivos();
+};
+
+/* ------------------------------ Limites de gastos (localStorage) ------------------------------ */
+function getLimites() { return JSON.parse(localStorage.getItem('limites') || '[]'); }
+function setLimites(list) { localStorage.setItem('limites', JSON.stringify(list)); }
+
+function gastoDoTermo(termo, mes) {
+  const t = termo.trim().toLowerCase();
+  return dados
+    .filter(d => d.tipo !== 'entrada' && d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() === mes.getMonth())
+    .filter(d => d.onde.toLowerCase() === t || d.produto.toLowerCase().includes(t))
+    .reduce((acc, d) => acc + d.valorTotal, 0);
+}
+
+function renderLimites() {
+  const list = getLimites();
+  document.getElementById('limitesList').innerHTML = list.map((l, idx) => {
+    const gasto = gastoDoTermo(l.termo, mesSelecionado);
+    const pct = Math.min(100, Math.round((gasto / l.limite) * 100));
+    const estourou = gasto > l.limite;
+    const cor = estourou ? 'var(--red)' : (pct >= 80 ? 'var(--amber)' : 'var(--accent)');
+    return `<div class="kpi-card" style="position:relative">
+      <button class="limite-excluir" data-idx="${idx}" title="Excluir limite" style="position:absolute;top:10px;right:10px;border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
+      <p class="label">${l.nome}</p>
+      <p class="value" style="font-size:16px;color:${cor}">${fmtMoeda(gasto)} <span style="font-size:12px;color:var(--text-muted);font-weight:400">/ ${fmtMoeda(l.limite)}</span></p>
+      <div class="progress-track" style="margin-top:8px"><div class="progress-fill" style="width:${pct}%;background:${cor}"></div></div>
+    </div>`;
+  }).join('') || '<p style="font-size:13px;color:var(--text-muted);grid-column:1/-1">Nenhum limite cadastrado ainda.</p>';
+
+  document.querySelectorAll('.limite-excluir').forEach(btn => {
+    btn.onclick = function () {
+      const idx = parseInt(this.dataset.idx);
+      if (!confirm('Excluir este limite?')) return;
+      const l = getLimites();
+      l.splice(idx, 1);
+      setLimites(l);
+      renderLimites();
+    };
+  });
+}
+
+document.getElementById('novoLimiteBtn').onclick = () => {
+  const f = document.getElementById('novoLimiteForm');
+  f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
+};
+document.getElementById('salvarLimiteBtn').onclick = () => {
+  const nome = document.getElementById('lNome').value.trim();
+  const termo = document.getElementById('lTermo').value.trim();
+  const limite = parseFloat(document.getElementById('lLimite').value.replace(/\./g, '').replace(',', '.'));
+  if (!nome || !termo || !limite) return;
+  const list = getLimites();
+  list.push({ nome, termo, limite });
+  setLimites(list);
+  document.getElementById('lNome').value = '';
+  document.getElementById('lTermo').value = '';
+  document.getElementById('lLimite').value = '';
+  document.getElementById('novoLimiteForm').style.display = 'none';
+  renderLimites();
 };
 
 /* ------------------------------ KPIs editáveis ------------------------------ */
