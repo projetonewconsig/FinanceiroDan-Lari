@@ -339,15 +339,14 @@ function render() {
   const totalProximo = Object.values(projProximo).reduce((a, b) => a + b, 0);
   document.getElementById('kpiParcelasProximo').textContent = fmtMoeda(totalProximo);
 
-  // KPI: gasto do mês selecionado e do mês seguinte (soma pelo VALOR TOTAL
-  // da compra, pela data em que foi feita — não pelo valor de parcela)
-  const somaGastoPorMes = (mes) => dados
-    .filter(d => d.tipo !== 'entrada' && d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() === mes.getMonth())
-    .reduce((acc, d) => acc + d.valorTotal, 0);
+  // KPI: gasto do mês selecionado e do mês seguinte (soma pelas PARCELAS
+  // que vencem naquele mês — inclui parcelamentos antigos ainda em aberto,
+  // não só compras feitas naquele mês)
+  const somaProjecaoMes = (mes) => Object.values(projecao[chaveMs(mes)] || {}).reduce((a, b) => a + b, 0);
 
   const proximoMesObj = new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() + 1, 1);
-  document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(somaGastoPorMes(mesSelecionado));
-  document.getElementById('kpiFixoProximo').textContent = fmtMoeda(somaGastoPorMes(proximoMesObj));
+  document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(somaProjecaoMes(mesSelecionado));
+  document.getElementById('kpiFixoProximo').textContent = fmtMoeda(somaProjecaoMes(proximoMesObj));
 
   const reserva = parseFloat(localStorage.getItem('kpiReserva') || '0');
   document.getElementById('kpiReservaValue').textContent = fmtMoeda(reserva);
