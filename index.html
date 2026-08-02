@@ -152,7 +152,7 @@
       <div><label>Categoria (Onde?)</label><select id="fCategoria"></select></div>
     </div>
     <div class="row2">
-      <div><label>Parcelas (total de vezes)</label><input id="fParcelas" placeholder="Ex: 6" value="1"></div>
+      <div id="parcelasField"><label>Parcelas (total de vezes)</label><input id="fParcelas" placeholder="Ex: 6" value="1"></div>
       <div>
         <label>Forma de pagamento</label>
         <div class="pag-toggle">
@@ -162,6 +162,9 @@
       </div>
       <button id="salvarGastoBtn">Adicionar</button>
     </div>
+    <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;color:var(--text-secondary)">
+      <input type="checkbox" id="fFixo" style="width:auto"> Gasto fixo (repete todo mês, ex: aluguel/parcela do apartamento)
+    </label>
     <p id="formStatus"></p>
   </div>
 
@@ -280,14 +283,16 @@ function parseData(dataStr) {
 }
 
 function parseLinha(row) {
-  const total = parseInt(row['Parcelas']) || 1;
+  const parcelasRaw = String(row['Parcelas'] || '1').trim();
+  const fixo = parcelasRaw.toLowerCase() === 'fixo';
+  const total = fixo ? null : (parseInt(parcelasRaw) || 1);
   const valorTotal = parseFloat(String(row['Valor'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-  const parcelaValor = valorTotal / total;
+  const parcelaValor = fixo ? valorTotal : valorTotal / total;
   const data = parseData(row['Data']);
   return {
     produto: row['Descrição'] || row['Descricao'] || '',
     tipo: (row['Tipo'] || 'saida').toLowerCase(),
-    valorTotal, parcelaValor, atual: 1, total, data,
+    valorTotal, parcelaValor, atual: 1, total, fixo, data,
     formaPag: row['MetodoPagamento'] || '',
     cartao: row['Cartao'] || row['Cartão'] || '',
     onde: row['Categoria'] || 'Outros'
@@ -299,17 +304,29 @@ function parseLinha(row) {
    Para cada compra parcelada ainda em aberto (atual < total),
    projeta as parcelas restantes nos meses seguintes ao mês da
    linha (Data), uma por mês, mesmo valor de "Parcela".
+   Gastos marcados como "Fixo" (Parcelas = "Fixo") repetem o valor
+   total todo mês, do mês da Data até o limite do gráfico (ateData).
    Retorna: { 'YYYY-MM': { categoria: valor, ... } }
    ----------------------------------------------------------------- */
-function calcularProjecao(linhas) {
+function calcularProjecao(linhas, ateData) {
   const projecao = {};
+  const somar = (chave, categoria, valor) => {
+    if (!projecao[chave]) projecao[chave] = {};
+    projecao[chave][categoria] = (projecao[chave][categoria] || 0) + valor;
+  };
   linhas.filter(l => l.tipo !== 'entrada').forEach(l => {
-    for (let i = l.atual; i <= l.total; i++) {
-      const offset = i - l.atual;
-      const dataParcela = new Date(l.data.getFullYear(), l.data.getMonth() + offset, 1);
-      const chave = chaveMs(dataParcela);
-      if (!projecao[chave]) projecao[chave] = {};
-      projecao[chave][l.onde] = (projecao[chave][l.onde] || 0) + l.parcelaValor;
+    if (l.fixo) {
+      let cursor = new Date(l.data.getFullYear(), l.data.getMonth(), 1);
+      while (cursor <= ateData) {
+        somar(chaveMs(cursor), l.onde, l.valorTotal);
+        cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+      }
+    } else {
+      for (let i = l.atual; i <= l.total; i++) {
+        const offset = i - l.atual;
+        const dataParcela = new Date(l.data.getFullYear(), l.data.getMonth() + offset, 1);
+        somar(chaveMs(dataParcela), l.onde, l.parcelaValor);
+      }
     }
   });
   return projecao;
@@ -330,8 +347,8 @@ function render() {
   document.getElementById('monthLabel').textContent =
     MESES[mesSelecionado.getMonth()] + ' ' + mesSelecionado.getFullYear();
 
-  const projecao = calcularProjecao(dados);
   const meses5 = proximosMeses(mesSelecionado, 5);
+  const projecao = calcularProjecao(dados, meses5[meses5.length - 1]);
   const chaveProximo = chaveMs(new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() + 1, 1));
 
   // KPI: parcelas em aberto no próximo mês (soma de todas categorias)
@@ -470,8 +487,11 @@ function setLimites(list) { localStorage.setItem('limites', JSON.stringify(list)
 function gastoDoTermo(termo, mes) {
   const t = termo.trim().toLowerCase();
   return dados
-    .filter(d => d.tipo !== 'entrada' && d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() === mes.getMonth())
+    .filter(d => d.tipo !== 'entrada')
     .filter(d => d.onde.toLowerCase() === t || d.produto.toLowerCase().includes(t))
+    .filter(d => d.fixo
+      ? (d.data.getFullYear() < mes.getFullYear() || (d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() <= mes.getMonth()))
+      : (d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() === mes.getMonth()))
     .reduce((acc, d) => acc + d.valorTotal, 0);
 }
 
@@ -568,11 +588,17 @@ document.getElementById('btnPix').onclick = function () {
   document.getElementById('btnCartao').classList.remove('active');
 };
 
+document.getElementById('fFixo').onchange = function () {
+  document.getElementById('fParcelas').disabled = this.checked;
+  document.getElementById('parcelasField').style.opacity = this.checked ? 0.4 : 1;
+};
+
 document.getElementById('salvarGastoBtn').onclick = async () => {
   const status = document.getElementById('formStatus');
   const produto = document.getElementById('fProduto').value.trim();
   const valor = parseFloat(document.getElementById('fValor').value.replace(',', '.'));
   const categoria = document.getElementById('fCategoria').value;
+  const fixo = document.getElementById('fFixo').checked;
   const totalParcelas = parseInt(document.getElementById('fParcelas').value) || 1;
 
   if (!produto || !valor) { status.textContent = 'Preencha produto e valor.'; return; }
@@ -597,7 +623,7 @@ document.getElementById('salvarGastoBtn').onclick = async () => {
         Valor: valor,
         MetodoPagamento: formaPagamento === 'Pix' ? 'PIX' : 'CREDITO',
         Cartao: formaPagamento === 'Pix' ? '' : formaPagamento,
-        Parcelas: totalParcelas
+        Parcelas: fixo ? 'Fixo' : totalParcelas
       })
     });
     status.textContent = 'Gasto adicionado.';
@@ -614,7 +640,8 @@ const DADOS_EXEMPLO = [
   { Descrição: 'Compra de gasolina no cartão Caixa', Categoria: 'Transporte', Tipo: 'saida', Data: '07-06-2026', Valor: '100', MetodoPagamento: 'CREDITO', Cartao: 'Caixa', Parcelas: '1' },
   { Descrição: 'Manutenção do carro', Categoria: 'Transporte', Tipo: 'saida', Data: '07-06-2026', Valor: '560', MetodoPagamento: 'CREDITO', Cartao: 'Caixa', Parcelas: '5' },
   { Descrição: 'Compra de livro e funko', Categoria: 'Lazer', Tipo: 'saida', Data: '27-04-2026', Valor: '258,5', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '5' },
-  { Descrição: 'Compra na Riachuelo', Categoria: 'Pessoal', Tipo: 'saida', Data: '27-04-2026', Valor: '359,98', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '3' }
+  { Descrição: 'Compra na Riachuelo', Categoria: 'Pessoal', Tipo: 'saida', Data: '27-04-2026', Valor: '359,98', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '3' },
+  { Descrição: 'Parcela do apartamento', Categoria: 'Casa', Tipo: 'saida', Data: '01-01-2026', Valor: '1800', MetodoPagamento: 'PIX', Cartao: '', Parcelas: 'Fixo' }
 ];
 
 /* ------------------------------ Carregamento ------------------------------ */
