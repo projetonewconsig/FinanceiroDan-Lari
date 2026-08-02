@@ -171,13 +171,12 @@
   <div id="dashboard" style="display:none">
 
     <div class="kpi-grid">
-      <div class="kpi-card editable" id="kpiFixoMensal">
-        <p class="label">Gasto fixo mensal</p>
+      <div class="kpi-card" id="kpiFixoMensal">
+        <p class="label">Gasto do mês</p>
         <p class="value" id="kpiFixoMensalValue">R$ 0,00</p>
-        <span class="kpi-hint">editar</span>
       </div>
       <div class="kpi-card">
-        <p class="label">Fixo próximo mês</p>
+        <p class="label">Gasto no próximo mês</p>
         <p class="value" id="kpiFixoProximo">R$ 0,00</p>
       </div>
       <div class="kpi-card">
@@ -324,11 +323,15 @@ function render() {
   const totalProximo = Object.values(projProximo).reduce((a, b) => a + b, 0);
   document.getElementById('kpiParcelasProximo').textContent = fmtMoeda(totalProximo);
 
-  // KPI: "Fixo próximo mês" -> por enquanto espelha o valor de "Gasto fixo mensal"
-  // (não há distinção de contas recorrentes na planilha de compras; ver nota no chat)
-  const fixoMensal = parseFloat(localStorage.getItem('kpiFixoMensal') || '0');
-  document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(fixoMensal);
-  document.getElementById('kpiFixoProximo').textContent = fmtMoeda(fixoMensal);
+  // KPI: gasto do mês selecionado e do mês seguinte (soma pelo VALOR TOTAL
+  // da compra, pela data em que foi feita — não pelo valor de parcela)
+  const somaGastoPorMes = (mes) => dados
+    .filter(d => d.tipo !== 'entrada' && d.data.getFullYear() === mes.getFullYear() && d.data.getMonth() === mes.getMonth())
+    .reduce((acc, d) => acc + d.valorTotal, 0);
+
+  const proximoMesObj = new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() + 1, 1);
+  document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(somaGastoPorMes(mesSelecionado));
+  document.getElementById('kpiFixoProximo').textContent = fmtMoeda(somaGastoPorMes(proximoMesObj));
 
   const reserva = parseFloat(localStorage.getItem('kpiReserva') || '0');
   document.getElementById('kpiReservaValue').textContent = fmtMoeda(reserva);
@@ -462,7 +465,6 @@ function tornarEditavel(cardId, valueId, storageKey) {
     input.onkeydown = e => { if (e.key === 'Enter') input.blur(); };
   };
 }
-tornarEditavel('kpiFixoMensal', 'kpiFixoMensalValue', 'kpiFixoMensal');
 tornarEditavel('kpiReserva', 'kpiReservaValue', 'kpiReserva');
 
 /* ------------------------------ Navegação de mês ------------------------------ */
