@@ -378,9 +378,33 @@ function renderObjetivos() {
     return `<div class="obj-card">
       <div class="obj-top"><span>${o.nome}</span><span class="pct">${pct}%</span></div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="obj-values">${fmtMoeda(o.guardado)} / ${fmtMoeda(o.meta)}</div>
+      <div class="obj-values" data-idx="${idx}" style="cursor:pointer" title="Clique para editar o valor guardado">
+        <span class="obj-guardado">${fmtMoeda(o.guardado)}</span> / ${fmtMoeda(o.meta)} <span style="text-decoration:underline">editar</span>
+      </div>
     </div>`;
   }).join('') || '<p style="font-size:13px;color:var(--text-muted)">Nenhum objetivo cadastrado ainda.</p>';
+
+  // Clique no valor guardado -> vira input editável
+  document.querySelectorAll('.obj-values').forEach(el => {
+    el.onclick = function () {
+      const idx = parseInt(this.dataset.idx);
+      const listAtual = getObjetivos();
+      const atual = listAtual[idx].guardado;
+      this.innerHTML = `<input type="number" step="0.01" value="${atual}" style="width:90px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px">`;
+      const input = this.querySelector('input');
+      input.focus();
+      const salvar = () => {
+        const novo = parseFloat(input.value) || 0;
+        const l = getObjetivos();
+        l[idx].guardado = novo;
+        setObjetivos(l);
+        renderObjetivos();
+      };
+      input.onblur = salvar;
+      input.onkeydown = e => { if (e.key === 'Enter') input.blur(); };
+      input.onclick = e => e.stopPropagation();
+    };
+  });
 }
 
 document.getElementById('novoObjBtn').onclick = () => {
