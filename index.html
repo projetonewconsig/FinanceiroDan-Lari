@@ -247,23 +247,35 @@ function chaveMs(date) { return date.getFullYear() + '-' + String(date.getMonth(
 
 /* -----------------------------------------------------------------
    PARSE DA PLANILHA
-   Formato esperado por linha: Produto, Valor, Parcela, Numero de
-   vezes ("atual x total", ex: 5x6), Data, Forma de Pag, Onde?
+   Estrutura real gravada pelo agente N8N via WhatsApp:
+   Identificador, Numero, Descrição, Categoria, Tipo (saida/entrada),
+   Data, Valor, MetodoPagamento (CREDITO/PIX/DEBITO), Cartao, Parcelas
+   (número total de parcelas — sem "atual x total", pois a linha é
+   gravada uma única vez, no momento da compra).
+   Datas vêm no formato DD-MM-AAAA.
    ----------------------------------------------------------------- */
+function parseData(dataStr) {
+  if (!dataStr) return new Date();
+  const partes = String(dataStr).split('-');
+  if (partes.length === 3 && partes[0].length === 2) {
+    // DD-MM-AAAA
+    return new Date(parseInt(partes[2]), parseInt(partes[1]) - 1, parseInt(partes[0]));
+  }
+  return new Date(dataStr);
+}
+
 function parseLinha(row) {
-  const nv = String(row['Numero de vezes'] || row['Número de vezes'] || '1x1').trim();
-  const [atualStr, totalStr] = nv.toLowerCase().split('x');
-  const atual = parseInt(atualStr) || 1;
-  const total = parseInt(totalStr) || atual;
-  const parcelaValor = parseFloat(String(row['Parcela'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
-  const dataStr = row['Data'];
-  const data = dataStr ? new Date(dataStr) : new Date();
+  const total = parseInt(row['Parcelas']) || 1;
+  const valorTotal = parseFloat(String(row['Valor'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+  const parcelaValor = valorTotal / total;
+  const data = parseData(row['Data']);
   return {
-    produto: row['Produto'] || '',
-    valorTotal: parseFloat(String(row['Valor'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0,
-    parcelaValor, atual, total, data,
-    formaPag: row['Forma de Pag'] || row['Forma de Pagamento'] || '',
-    onde: row['Onde?'] || row['Onde'] || 'Outros'
+    produto: row['Descrição'] || row['Descricao'] || '',
+    tipo: (row['Tipo'] || 'saida').toLowerCase(),
+    valorTotal, parcelaValor, atual: 1, total, data,
+    formaPag: row['MetodoPagamento'] || '',
+    cartao: row['Cartao'] || row['Cartão'] || '',
+    onde: row['Categoria'] || 'Outros'
   };
 }
 
@@ -276,7 +288,7 @@ function parseLinha(row) {
    ----------------------------------------------------------------- */
 function calcularProjecao(linhas) {
   const projecao = {};
-  linhas.forEach(l => {
+  linhas.filter(l => l.tipo !== 'entrada').forEach(l => {
     for (let i = l.atual; i <= l.total; i++) {
       const offset = i - l.atual;
       const dataParcela = new Date(l.data.getFullYear(), l.data.getMonth() + offset, 1);
@@ -423,9 +435,9 @@ document.getElementById('novoGastoBtn').onclick = () => {
   const f = document.getElementById('novoGastoForm');
   f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
 };
-let formaPagamento = 'Cartão Itaú';
+let formaPagamento = 'Cartão';
 document.getElementById('btnCartao').onclick = function () {
-  formaPagamento = 'Cartão Itaú';
+  formaPagamento = 'Cartão';
   this.classList.add('active');
   document.getElementById('btnPix').classList.remove('active');
 };
@@ -451,17 +463,20 @@ document.getElementById('salvarGastoBtn').onclick = async () => {
 
   status.textContent = 'Salvando…';
   try {
+    const hoje = new Date();
+    const dataFmt = String(hoje.getDate()).padStart(2, '0') + '-' + String(hoje.getMonth() + 1).padStart(2, '0') + '-' + hoje.getFullYear();
     await fetch(APPS_SCRIPT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        Produto: produto,
+        'Descrição': produto,
+        Categoria: categoria,
+        Tipo: 'saida',
+        Data: dataFmt,
         Valor: valor,
-        Parcela: (valor / totalParcelas).toFixed(2),
-        'Numero de vezes': '1x' + totalParcelas,
-        Data: new Date().toISOString().slice(0, 10),
-        'Forma de Pag': formaPagamento,
-        'Onde?': categoria
+        MetodoPagamento: formaPagamento === 'Pix' ? 'PIX' : 'CREDITO',
+        Cartao: formaPagamento === 'Pix' ? '' : formaPagamento,
+        Parcelas: totalParcelas
       })
     });
     status.textContent = 'Gasto adicionado.';
@@ -475,9 +490,10 @@ document.getElementById('salvarGastoBtn').onclick = async () => {
 
 /* ------------------------------ Dados de exemplo (fallback sem CSV_URL) ------------------------------ */
 const DADOS_EXEMPLO = [
-  { Produto: 'Curso Trackeamento', Valor: '446,88', Parcela: '74,48', 'Numero de vezes': '5x6', Data: '2026-03-10', 'Forma de Pag': 'Crédito Itaú', 'Onde?': 'Pessoal' },
-  { Produto: 'Fundue Dia Dos Namorados', Valor: '318,24', Parcela: '159,12', 'Numero de vezes': '2x2', Data: '2026-07-12', 'Forma de Pag': 'PickPay', 'Onde?': 'Supermercado' },
-  { Produto: 'Jaqueta Brasil', Valor: '450,00', Parcela: '75,00', 'Numero de vezes': '3x6', Data: '2026-06-01', 'Forma de Pag': 'Cartão Itaú', 'Onde?': 'Pessoal' }
+  { Descrição: 'Compra de gasolina no cartão Caixa', Categoria: 'Transporte', Tipo: 'saida', Data: '07-06-2026', Valor: '100', MetodoPagamento: 'CREDITO', Cartao: 'Caixa', Parcelas: '1' },
+  { Descrição: 'Manutenção do carro', Categoria: 'Transporte', Tipo: 'saida', Data: '07-06-2026', Valor: '560', MetodoPagamento: 'CREDITO', Cartao: 'Caixa', Parcelas: '5' },
+  { Descrição: 'Compra de livro e funko', Categoria: 'Lazer', Tipo: 'saida', Data: '27-04-2026', Valor: '258,5', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '5' },
+  { Descrição: 'Compra na Riachuelo', Categoria: 'Pessoal', Tipo: 'saida', Data: '27-04-2026', Valor: '359,98', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '3' }
 ];
 
 /* ------------------------------ Carregamento ------------------------------ */
