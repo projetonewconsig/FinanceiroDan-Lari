@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Painel Financeiro — Casa</title>
+<style>
+  /* ===========================================================
+     DECISÃO DE DESIGN: paleta minimalista, neutra, separada do
+     roxo/laranja da New Consig (esse painel é de uso doméstico,
+     não deve se confundir visualmente com o CRM do negócio).
+     =========================================================== */
+  :root {
+    --bg: #f7f7f5;
+    --surface-1: #ffffff;
+    --surface-2: #f0f0ed;
+    --border: #e1e0d9;
+    --text-primary: #1a1a18;
+    --text-secondary: #6b6a64;
+    --text-muted: #999790;
+    --accent: #1baf7a;
+    --accent-dark: #0f6e56;
+    --blue: #2a78d6;
+    --amber: #eda100;
+    --red: #d03b3b;
+    --radius: 10px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text-primary);
+    padding: 24px 16px 80px;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; }
+
+  /* Cabeçalho: mês + novo gasto */
+  .header-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+  }
+  .month-nav { display: flex; align-items: center; gap: 8px; }
+  .month-nav button {
+    border: none; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius); width: 32px; height: 32px; cursor: pointer;
+    font-size: 16px; color: var(--text-secondary);
+  }
+  .month-label {
+    font-size: 15px; font-weight: 600; padding: 6px 16px;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  #novoGastoBtn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--accent); color: #fff; border: none;
+    padding: 8px 14px; border-radius: var(--radius); font-size: 14px; cursor: pointer;
+    font-weight: 500;
+  }
+  #novoGastoBtn:hover { background: var(--accent-dark); }
+
+  /* Formulário retrátil de novo gasto */
+  #novoGastoForm {
+    display: none;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px;
+    padding: 16px; margin-bottom: 20px;
+  }
+  #novoGastoForm .row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 10px; margin-bottom: 10px; }
+  #novoGastoForm .row2 { display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; }
+  #novoGastoForm label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+  #novoGastoForm input, #novoGastoForm select {
+    width: 100%; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; background: var(--bg);
+  }
+  .pag-toggle { display: flex; gap: 6px; }
+  .pag-toggle button {
+    flex: 1; padding: 8px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); cursor: pointer; font-size: 13px;
+  }
+  .pag-toggle button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  #salvarGastoBtn {
+    background: var(--text-primary); color: #fff; border: none; padding: 9px 16px;
+    border-radius: 8px; cursor: pointer; font-size: 14px; white-space: nowrap;
+  }
+  #formStatus { font-size: 12px; margin-top: 8px; color: var(--text-muted); }
+
+  /* KPIs */
+  .kpi-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 12px; margin-bottom: 24px;
+  }
+  .kpi-card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; position: relative;
+  }
+  .kpi-card .label { font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
+  .kpi-card .value { font-size: 20px; font-weight: 600; margin: 0; }
+  .kpi-card.editable { cursor: pointer; }
+  .kpi-card.editable:hover { border-color: var(--accent); }
+  .kpi-card.editable .value input {
+    width: 100%; font-size: 20px; font-weight: 600; border: none; background: transparent;
+    padding: 0; font-family: inherit; color: var(--text-primary);
+  }
+  .kpi-hint { font-size: 10px; color: var(--text-muted); position: absolute; top: 10px; right: 10px; }
+
+  /* Layout principal: gráfico + objetivos lado a lado */
+  .main-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 24px; }
+  @media (max-width: 720px) { .main-grid { grid-template-columns: 1fr; } }
+
+  .section-title { font-size: 14px; color: var(--text-secondary); margin: 0 0 10px; font-weight: 500; }
+  .chart-wrap { position: relative; width: 100%; height: 240px; margin-bottom: 10px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--text-secondary); }
+  .legend span { display: flex; align-items: center; gap: 5px; }
+  .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+
+  .obj-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  #novoObjBtn {
+    font-size: 12px; padding: 5px 10px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); cursor: pointer;
+  }
+  .obj-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 10px; }
+  .obj-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 13px; }
+  .obj-top .pct { color: var(--text-secondary); }
+  .progress-track { height: 6px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 4px; }
+  .obj-values { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+  #novoObjForm { display: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+  #novoObjForm input { width: 100%; padding: 7px 9px; margin-bottom: 8px; border: 1px solid var(--border); border-radius: 6px; font-size: 13px; }
+  #novoObjForm button { width: 100%; padding: 8px; border: none; border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+
+  #loadingMsg, #errorMsg { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; }
+  #errorMsg { color: var(--red); display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="header-row">
+    <div class="month-nav">
+      <button id="prevMonth" aria-label="Mês anterior">&#8592;</button>
+      <span class="month-label" id="monthLabel">—</span>
+      <button id="nextMonth" aria-label="Próximo mês">&#8594;</button>
+    </div>
+    <button id="novoGastoBtn">+ Novo gasto</button>
+  </div>
+
+  <!-- Formulário retrátil: só aparece ao clicar em "+ Novo gasto" -->
+  <div id="novoGastoForm">
+    <div class="row">
+      <div><label>Produto</label><input id="fProduto" placeholder="Ex: Tênis Puma"></div>
+      <div><label>Valor total</label><input id="fValor" placeholder="R$ 0,00"></div>
+      <div><label>Categoria (Onde?)</label><select id="fCategoria"></select></div>
+    </div>
+    <div class="row2">
+      <div><label>Parcelas (total de vezes)</label><input id="fParcelas" placeholder="Ex: 6" value="1"></div>
+      <div>
+        <label>Forma de pagamento</label>
+        <div class="pag-toggle">
+          <button type="button" id="btnCartao" class="active">Cartão</button>
+          <button type="button" id="btnPix">Pix</button>
+        </div>
+      </div>
+      <button id="salvarGastoBtn">Adicionar</button>
+    </div>
+    <p id="formStatus"></p>
+  </div>
+
+  <div id="loadingMsg">Carregando dados da planilha…</div>
+  <div id="errorMsg"></div>
+
+  <div id="dashboard" style="display:none">
+
+    <div class="kpi-grid">
+      <div class="kpi-card editable" id="kpiFixoMensal">
+        <p class="label">Gasto fixo mensal</p>
+        <p class="value" id="kpiFixoMensalValue">R$ 0,00</p>
+        <span class="kpi-hint">editar</span>
+      </div>
+      <div class="kpi-card">
+        <p class="label">Fixo próximo mês</p>
+        <p class="value" id="kpiFixoProximo">R$ 0,00</p>
+      </div>
+      <div class="kpi-card">
+        <p class="label">Parcelas em aberto próx. mês</p>
+        <p class="value" id="kpiParcelasProximo">R$ 0,00</p>
+      </div>
+      <div class="kpi-card editable" id="kpiReserva">
+        <p class="label">Reserva de emergência</p>
+        <p class="value" id="kpiReservaValue">R$ 0,00</p>
+        <span class="kpi-hint">editar</span>
+      </div>
+    </div>
+
+    <div class="main-grid">
+      <div>
+        <p class="section-title">Médio prazo — por categoria</p>
+        <div class="chart-wrap"><canvas id="medioChart" role="img" aria-label="Gráfico de barras empilhadas com parcelas comprometidas nos próximos meses, por categoria"></canvas></div>
+        <div class="legend" id="medioLegend"></div>
+      </div>
+
+      <div>
+        <div class="obj-header">
+          <p class="section-title" style="margin:0">Objetivos do casal</p>
+          <button id="novoObjBtn">+ Novo</button>
+        </div>
+        <div id="novoObjForm">
+          <input id="oNome" placeholder="Nome do objetivo">
+          <input id="oMeta" placeholder="Valor da meta (R$)">
+          <button id="salvarObjBtn">Salvar objetivo</button>
+        </div>
+        <div id="objList"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+/* =================================================================
+   CONFIGURAÇÃO
+   - CSV_URL: link do Google Sheets publicado na web (Arquivo >
+     Compartilhar > Publicar na web > formato CSV). Enquanto não
+     configurado, o painel mostra dados de exemplo.
+   - APPS_SCRIPT_URL: endpoint de um Google Apps Script Web App
+     que faz o append da nova linha na planilha (a publicação CSV
+     é só leitura, então "Novo gasto" precisa desse endpoint
+     separado para poder escrever). Ver instruções de setup.
+   ================================================================= */
+const CSV_URL = ""; // <- cole aqui o link publicado do Google Sheets
+const APPS_SCRIPT_URL = ""; // <- cole aqui a URL do Apps Script Web App
+
+const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948'];
+
+let dados = [];       // linhas parseadas da planilha
+let categorias = [];  // valores únicos de "Onde?"
+let mesSelecionado = new Date(); mesSelecionado.setDate(1);
+
+const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+
+function fmtMoeda(v) {
+  return 'R$ ' + (Math.round(v * 100) / 100).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+}
+
+function chaveMs(date) { return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0'); }
+
+/* -----------------------------------------------------------------
+   PARSE DA PLANILHA
+   Formato esperado por linha: Produto, Valor, Parcela, Numero de
+   vezes ("atual x total", ex: 5x6), Data, Forma de Pag, Onde?
+   ----------------------------------------------------------------- */
+function parseLinha(row) {
+  const nv = String(row['Numero de vezes'] || row['Número de vezes'] || '1x1').trim();
+  const [atualStr, totalStr] = nv.toLowerCase().split('x');
+  const atual = parseInt(atualStr) || 1;
+  const total = parseInt(totalStr) || atual;
+  const parcelaValor = parseFloat(String(row['Parcela'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0;
+  const dataStr = row['Data'];
+  const data = dataStr ? new Date(dataStr) : new Date();
+  return {
+    produto: row['Produto'] || '',
+    valorTotal: parseFloat(String(row['Valor'] || '0').replace(/[^\d,.-]/g, '').replace(',', '.')) || 0,
+    parcelaValor, atual, total, data,
+    formaPag: row['Forma de Pag'] || row['Forma de Pagamento'] || '',
+    onde: row['Onde?'] || row['Onde'] || 'Outros'
+  };
+}
+
+/* -----------------------------------------------------------------
+   PROJEÇÃO DE MÉDIO PRAZO
+   Para cada compra parcelada ainda em aberto (atual < total),
+   projeta as parcelas restantes nos meses seguintes ao mês da
+   linha (Data), uma por mês, mesmo valor de "Parcela".
+   Retorna: { 'YYYY-MM': { categoria: valor, ... } }
+   ----------------------------------------------------------------- */
+function calcularProjecao(linhas) {
+  const projecao = {};
+  linhas.forEach(l => {
+    for (let i = l.atual; i <= l.total; i++) {
+      const offset = i - l.atual;
+      const dataParcela = new Date(l.data.getFullYear(), l.data.getMonth() + offset, 1);
+      const chave = chaveMs(dataParcela);
+      if (!projecao[chave]) projecao[chave] = {};
+      projecao[chave][l.onde] = (projecao[chave][l.onde] || 0) + l.parcelaValor;
+    }
+  });
+  return projecao;
+}
+
+function proximosMeses(base, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    out.push(new Date(base.getFullYear(), base.getMonth() + i, 1));
+  }
+  return out;
+}
+
+/* ------------------------------ RENDER ------------------------------ */
+let chartInstance = null;
+
+function render() {
+  document.getElementById('monthLabel').textContent =
+    MESES[mesSelecionado.getMonth()] + ' ' + mesSelecionado.getFullYear();
+
+  const projecao = calcularProjecao(dados);
+  const meses5 = proximosMeses(mesSelecionado, 5);
+  const chaveProximo = chaveMs(new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() + 1, 1));
+
+  // KPI: parcelas em aberto no próximo mês (soma de todas categorias)
+  const projProximo = projecao[chaveProximo] || {};
+  const totalProximo = Object.values(projProximo).reduce((a, b) => a + b, 0);
+  document.getElementById('kpiParcelasProximo').textContent = fmtMoeda(totalProximo);
+
+  // KPI: "Fixo próximo mês" -> por enquanto espelha o valor de "Gasto fixo mensal"
+  // (não há distinção de contas recorrentes na planilha de compras; ver nota no chat)
+  const fixoMensal = parseFloat(localStorage.getItem('kpiFixoMensal') || '0');
+  document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(fixoMensal);
+  document.getElementById('kpiFixoProximo').textContent = fmtMoeda(fixoMensal);
+
+  const reserva = parseFloat(localStorage.getItem('kpiReserva') || '0');
+  document.getElementById('kpiReservaValue').textContent = fmtMoeda(reserva);
+
+  // Gráfico médio prazo
+  const datasets = categorias.map((cat, idx) => ({
+    label: cat,
+    data: meses5.map(m => (projecao[chaveMs(m)] || {})[cat] || 0),
+    backgroundColor: CORES[idx % CORES.length]
+  }));
+
+  if (chartInstance) chartInstance.destroy();
+  chartInstance = new Chart(document.getElementById('medioChart'), {
+    type: 'bar',
+    data: { labels: meses5.map(m => MESES[m.getMonth()]), datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, grid: { display: false } },
+        y: { stacked: true, grid: { color: '#e1e0d9' }, ticks: { callback: v => 'R$ ' + v } }
+      },
+      plugins: { legend: { display: false } }
+    }
+  });
+
+  document.getElementById('medioLegend').innerHTML = categorias.map((cat, idx) =>
+    `<span><span class="dot" style="background:${CORES[idx % CORES.length]}"></span>${cat}</span>`
+  ).join('');
+
+  // Popula select de categoria no formulário de novo gasto
+  const sel = document.getElementById('fCategoria');
+  if (sel.options.length === 0) {
+    categorias.forEach(c => { const o = document.createElement('option'); o.textContent = c; sel.appendChild(o); });
+  }
+
+  renderObjetivos();
+}
+
+/* ------------------------------ OBJETIVOS (localStorage por enquanto) ------------------------------ */
+function getObjetivos() { return JSON.parse(localStorage.getItem('objetivos') || '[]'); }
+function setObjetivos(list) { localStorage.setItem('objetivos', JSON.stringify(list)); }
+
+function renderObjetivos() {
+  const list = getObjetivos();
+  document.getElementById('objList').innerHTML = list.map((o, idx) => {
+    const pct = Math.min(100, Math.round((o.guardado / o.meta) * 100));
+    return `<div class="obj-card">
+      <div class="obj-top"><span>${o.nome}</span><span class="pct">${pct}%</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+      <div class="obj-values">${fmtMoeda(o.guardado)} / ${fmtMoeda(o.meta)}</div>
+    </div>`;
+  }).join('') || '<p style="font-size:13px;color:var(--text-muted)">Nenhum objetivo cadastrado ainda.</p>';
+}
+
+document.getElementById('novoObjBtn').onclick = () => {
+  const f = document.getElementById('novoObjForm');
+  f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
+};
+document.getElementById('salvarObjBtn').onclick = () => {
+  const nome = document.getElementById('oNome').value.trim();
+  const meta = parseFloat(document.getElementById('oMeta').value.replace(',', '.'));
+  if (!nome || !meta) return;
+  const list = getObjetivos();
+  list.push({ nome, meta, guardado: 0 });
+  setObjetivos(list);
+  document.getElementById('oNome').value = '';
+  document.getElementById('oMeta').value = '';
+  document.getElementById('novoObjForm').style.display = 'none';
+  renderObjetivos();
+};
+
+/* ------------------------------ KPIs editáveis ------------------------------ */
+function tornarEditavel(cardId, valueId, storageKey) {
+  document.getElementById(cardId).onclick = function () {
+    const valEl = document.getElementById(valueId);
+    const atual = parseFloat(localStorage.getItem(storageKey) || '0');
+    valEl.innerHTML = `<input type="number" step="0.01" value="${atual}">`;
+    const input = valEl.querySelector('input');
+    input.focus();
+    const salvar = () => {
+      const novo = parseFloat(input.value) || 0;
+      localStorage.setItem(storageKey, novo);
+      render();
+    };
+    input.onblur = salvar;
+    input.onkeydown = e => { if (e.key === 'Enter') input.blur(); };
+  };
+}
+tornarEditavel('kpiFixoMensal', 'kpiFixoMensalValue', 'kpiFixoMensal');
+tornarEditavel('kpiReserva', 'kpiReservaValue', 'kpiReserva');
+
+/* ------------------------------ Navegação de mês ------------------------------ */
+document.getElementById('prevMonth').onclick = () => {
+  mesSelecionado = new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() - 1, 1);
+  render();
+};
+document.getElementById('nextMonth').onclick = () => {
+  mesSelecionado = new Date(mesSelecionado.getFullYear(), mesSelecionado.getMonth() + 1, 1);
+  render();
+};
+
+/* ------------------------------ Formulário novo gasto ------------------------------ */
+document.getElementById('novoGastoBtn').onclick = () => {
+  const f = document.getElementById('novoGastoForm');
+  f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
+};
+let formaPagamento = 'Cartão Itaú';
+document.getElementById('btnCartao').onclick = function () {
+  formaPagamento = 'Cartão Itaú';
+  this.classList.add('active');
+  document.getElementById('btnPix').classList.remove('active');
+};
+document.getElementById('btnPix').onclick = function () {
+  formaPagamento = 'Pix';
+  this.classList.add('active');
+  document.getElementById('btnCartao').classList.remove('active');
+};
+
+document.getElementById('salvarGastoBtn').onclick = async () => {
+  const status = document.getElementById('formStatus');
+  const produto = document.getElementById('fProduto').value.trim();
+  const valor = parseFloat(document.getElementById('fValor').value.replace(',', '.'));
+  const categoria = document.getElementById('fCategoria').value;
+  const totalParcelas = parseInt(document.getElementById('fParcelas').value) || 1;
+
+  if (!produto || !valor) { status.textContent = 'Preencha produto e valor.'; return; }
+
+  if (!APPS_SCRIPT_URL) {
+    status.textContent = 'Endpoint de escrita ainda não configurado (ver instruções de setup).';
+    return;
+  }
+
+  status.textContent = 'Salvando…';
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        Produto: produto,
+        Valor: valor,
+        Parcela: (valor / totalParcelas).toFixed(2),
+        'Numero de vezes': '1x' + totalParcelas,
+        Data: new Date().toISOString().slice(0, 10),
+        'Forma de Pag': formaPagamento,
+        'Onde?': categoria
+      })
+    });
+    status.textContent = 'Gasto adicionado.';
+    document.getElementById('fProduto').value = '';
+    document.getElementById('fValor').value = '';
+    carregarDados(); // recarrega a planilha para refletir o novo gasto
+  } catch (e) {
+    status.textContent = 'Erro ao salvar. Tente novamente.';
+  }
+};
+
+/* ------------------------------ Dados de exemplo (fallback sem CSV_URL) ------------------------------ */
+const DADOS_EXEMPLO = [
+  { Produto: 'Curso Trackeamento', Valor: '446,88', Parcela: '74,48', 'Numero de vezes': '5x6', Data: '2026-03-10', 'Forma de Pag': 'Crédito Itaú', 'Onde?': 'Pessoal' },
+  { Produto: 'Fundue Dia Dos Namorados', Valor: '318,24', Parcela: '159,12', 'Numero de vezes': '2x2', Data: '2026-07-12', 'Forma de Pag': 'PickPay', 'Onde?': 'Supermercado' },
+  { Produto: 'Jaqueta Brasil', Valor: '450,00', Parcela: '75,00', 'Numero de vezes': '3x6', Data: '2026-06-01', 'Forma de Pag': 'Cartão Itaú', 'Onde?': 'Pessoal' }
+];
+
+/* ------------------------------ Carregamento ------------------------------ */
+function carregarDados() {
+  document.getElementById('loadingMsg').style.display = 'block';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('errorMsg').style.display = 'none';
+
+  const aoTerminar = (rows) => {
+    dados = rows.map(parseLinha).filter(r => r.produto);
+    categorias = [...new Set(dados.map(d => d.onde))];
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    render();
+  };
+
+  if (!CSV_URL) {
+    aoTerminar(DADOS_EXEMPLO);
+    return;
+  }
+
+  Papa.parse(CSV_URL, {
+    download: true,
+    header: true,
+    complete: (results) => aoTerminar(results.data),
+    error: () => {
+      document.getElementById('loadingMsg').style.display = 'none';
+      document.getElementById('errorMsg').style.display = 'block';
+      document.getElementById('errorMsg').textContent = 'Não foi possível carregar a planilha. Usando dados de exemplo.';
+      aoTerminar(DADOS_EXEMPLO);
+    }
+  });
+}
+
+carregarDados();
+</script>
+</body>
+</html>
