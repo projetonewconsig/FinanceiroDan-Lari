@@ -348,7 +348,7 @@ function render() {
       responsive: true, maintainAspectRatio: false,
       scales: {
         x: { stacked: true, grid: { display: false } },
-        y: { stacked: true, grid: { color: '#e1e0d9' }, ticks: { callback: v => 'R$ ' + v } }
+        y: { stacked: true, grid: { color: '#e1e0d9' }, ticks: { callback: v => 'R$ ' + v.toLocaleString('pt-BR') } }
       },
       plugins: { legend: { display: false } }
     }
@@ -376,13 +376,32 @@ function renderObjetivos() {
   document.getElementById('objList').innerHTML = list.map((o, idx) => {
     const pct = Math.min(100, Math.round((o.guardado / o.meta) * 100));
     return `<div class="obj-card">
-      <div class="obj-top"><span>${o.nome}</span><span class="pct">${pct}%</span></div>
+      <div class="obj-top">
+        <span>${o.nome}</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <span class="pct">${pct}%</span>
+          <button class="obj-excluir" data-idx="${idx}" title="Excluir objetivo" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
+        </span>
+      </div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
       <div class="obj-values" data-idx="${idx}" style="cursor:pointer" title="Clique para editar o valor guardado">
         <span class="obj-guardado">${fmtMoeda(o.guardado)}</span> / ${fmtMoeda(o.meta)} <span style="text-decoration:underline">editar</span>
       </div>
     </div>`;
   }).join('') || '<p style="font-size:13px;color:var(--text-muted)">Nenhum objetivo cadastrado ainda.</p>';
+
+  // Excluir objetivo
+  document.querySelectorAll('.obj-excluir').forEach(btn => {
+    btn.onclick = function (e) {
+      e.stopPropagation();
+      const idx = parseInt(this.dataset.idx);
+      if (!confirm('Excluir este objetivo?')) return;
+      const l = getObjetivos();
+      l.splice(idx, 1);
+      setObjetivos(l);
+      renderObjetivos();
+    };
+  });
 
   // Clique no valor guardado -> vira input editável
   document.querySelectorAll('.obj-values').forEach(el => {
