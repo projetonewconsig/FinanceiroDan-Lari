@@ -228,7 +228,7 @@
      é só leitura, então "Novo gasto" precisa desse endpoint
      separado para poder escrever). Ver instruções de setup.
    ================================================================= */
-const CSV_URL = ""; // <- cole aqui o link publicado do Google Sheets
+const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkd-V78VXrjBiR3DMFXDapRVWzx4PuyCE4R4RmmxMCJbLbNQ6HJc6dFKFK9XPWSIzPHRwEEAWxngKK/pub?gid=0&single=true&output=csv"; // <- cole aqui o link publicado do Google Sheets
 const APPS_SCRIPT_URL = ""; // <- cole aqui a URL do Apps Script Web App
 
 const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948'];
@@ -409,11 +409,12 @@ function renderObjetivos() {
       const idx = parseInt(this.dataset.idx);
       const listAtual = getObjetivos();
       const atual = listAtual[idx].guardado;
-      this.innerHTML = `<input type="number" step="0.01" value="${atual}" style="width:90px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px">`;
+      this.innerHTML = `<input type="text" inputmode="decimal" value="${atual.toString().replace('.', ',')}" style="width:90px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px">`;
       const input = this.querySelector('input');
       input.focus();
+      input.select();
       const salvar = () => {
-        const novo = parseFloat(input.value) || 0;
+        const novo = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
         const l = getObjetivos();
         l[idx].guardado = novo;
         setObjetivos(l);
@@ -448,11 +449,12 @@ function tornarEditavel(cardId, valueId, storageKey) {
   document.getElementById(cardId).onclick = function () {
     const valEl = document.getElementById(valueId);
     const atual = parseFloat(localStorage.getItem(storageKey) || '0');
-    valEl.innerHTML = `<input type="number" step="0.01" value="${atual}">`;
+    valEl.innerHTML = `<input type="text" inputmode="decimal" value="${atual.toString().replace('.', ',')}">`;
     const input = valEl.querySelector('input');
     input.focus();
+    input.select();
     const salvar = () => {
-      const novo = parseFloat(input.value) || 0;
+      const novo = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
       localStorage.setItem(storageKey, novo);
       render();
     };
