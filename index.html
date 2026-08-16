@@ -267,10 +267,15 @@
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkd-V78VXrjBiR3DMFXDapRVWzx4PuyCE4R4RmmxMCJbLbNQ6HJc6dFKFK9XPWSIzPHRwEEAWxngKK/pub?gid=0&single=true&output=csv"; // <- cole aqui o link publicado do Google Sheets
 const APPS_SCRIPT_URL = ""; // <- cole aqui a URL do Apps Script Web App
 
-const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948'];
+const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948', '#8a6d3b', '#3b8a8a', '#c26bcf', '#6ba33b', '#b3893b', '#3b5fb3', '#b33b6e'];
+
+// Lista fixa de categorias configurada como validação de dados na planilha
+// (Categoria). Mantida aqui pra sempre aparecer no seletor, mesmo sem gasto
+// lançado ainda naquela categoria no mês.
+const CATEGORIAS_PADRAO = ['Alimentação', 'Assinatura', 'Casa', 'Estética', 'Lazer', 'Mercado', 'Saúde', 'Transporte', 'Presentes', 'Vestuário', 'Viagem', 'Carro', 'Ifood', 'Outros'];
 
 let dados = [];       // linhas parseadas da planilha
-let categorias = [];  // valores únicos de "Onde?"
+let categorias = [];  // lista fixa da planilha + qualquer categoria extra encontrada nos dados
 let mesSelecionado = new Date(); mesSelecionado.setDate(1);
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
@@ -756,7 +761,7 @@ function carregarDados() {
 
   const aoTerminar = (rows) => {
     dados = rows.map(parseLinha).filter(r => r.produto);
-    categorias = [...new Set(dados.map(d => d.onde))];
+    categorias = [...new Set([...CATEGORIAS_PADRAO, ...dados.map(d => d.onde)])];
     document.getElementById('loadingMsg').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
     render();
