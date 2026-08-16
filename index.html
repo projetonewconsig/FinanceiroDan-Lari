@@ -265,6 +265,7 @@
      separado para poder escrever). Ver instruções de setup.
    ================================================================= */
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkd-V78VXrjBiR3DMFXDapRVWzx4PuyCE4R4RmmxMCJbLbNQ6HJc6dFKFK9XPWSIzPHRwEEAWxngKK/pub?gid=0&single=true&output=csv"; // <- cole aqui o link publicado do Google Sheets
+const DATA_INICIO = new Date(2026, 8, 1); // 1º de setembro de 2026 — gastos antes disso (lançamentos de teste/calibração) são ignorados no painel
 const APPS_SCRIPT_URL = ""; // <- cole aqui a URL do Apps Script Web App
 
 const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948', '#8a6d3b', '#3b8a8a', '#c26bcf', '#6ba33b', '#b3893b', '#3b5fb3', '#b33b6e'];
@@ -276,7 +277,7 @@ const CATEGORIAS_PADRAO = ['Alimentação', 'Assinatura', 'Casa', 'Estética', '
 
 let dados = [];       // linhas parseadas da planilha
 let categorias = [];  // lista fixa da planilha + qualquer categoria extra encontrada nos dados
-let mesSelecionado = new Date(); mesSelecionado.setDate(1);
+let mesSelecionado = new Date(2026, 8, 1); // inicia em setembro/2026 (início da série real de dados)
 
 const MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 
@@ -760,7 +761,11 @@ function carregarDados() {
   document.getElementById('errorMsg').style.display = 'none';
 
   const aoTerminar = (rows) => {
-    dados = rows.map(parseLinha).filter(r => r.produto);
+    dados = rows.map(parseLinha).filter(r => r.produto)
+      // Ignora lançamentos de teste/calibração anteriores a DATA_INICIO —
+      // mas mantém gastos "Fixo" mesmo que tenham começado antes, já que
+      // são compromissos recorrentes ainda ativos.
+      .filter(r => r.fixo || r.data >= DATA_INICIO);
     categorias = [...new Set([...CATEGORIAS_PADRAO, ...dados.map(d => d.onde)])];
     document.getElementById('loadingMsg').style.display = 'none';
     document.getElementById('dashboard').style.display = 'block';
