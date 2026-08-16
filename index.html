@@ -243,7 +243,8 @@
     </div>
 
     <div style="margin-top:28px">
-      <p class="section-title">Gastos por categoria — clique para detalhar</p>
+      <p class="section-title">Gastos por categoria</p>
+      <select id="categoriaSelect" style="width:100%;max-width:280px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface-1);margin-bottom:12px"></select>
       <div id="categoriaDetalhe"></div>
     </div>
 
@@ -605,42 +606,43 @@ document.getElementById('salvarLimiteBtn').onclick = () => {
   renderLimites();
 };
 
-/* ------------------------------ Detalhamento por categoria (accordion) ------------------------------ */
+/* ------------------------------ Detalhamento por categoria (seletor único) ------------------------------ */
 function renderDetalheCategorias() {
+  const sel = document.getElementById('categoriaSelect');
   const el = document.getElementById('categoriaDetalhe');
-  if (!el) return;
-
-  const doMes = dados.filter(d => d.tipo !== 'entrada'
-    && d.data.getFullYear() === mesSelecionado.getFullYear()
-    && d.data.getMonth() === mesSelecionado.getMonth());
+  if (!sel || !el) return;
 
   if (categorias.length === 0) { el.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">Sem dados ainda.</p>'; return; }
 
-  el.innerHTML = categorias.map((cat, idx) => {
-    const itens = doMes.filter(d => d.onde === cat);
-    const total = itens.reduce((acc, d) => acc + d.valorTotal, 0);
-    const linhas = itens.length
-      ? itens.map(d => `<div class="cat-linha">
+  // Popula o select preservando a categoria já escolhida, se ainda existir
+  const anterior = sel.value;
+  sel.innerHTML = categorias.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = categorias.includes(anterior) ? anterior : categorias[0];
+
+  const desenharDetalhe = () => {
+    const cat = sel.value;
+    const doMes = dados.filter(d => d.tipo !== 'entrada'
+      && d.data.getFullYear() === mesSelecionado.getFullYear()
+      && d.data.getMonth() === mesSelecionado.getMonth()
+      && d.onde === cat);
+    const total = doMes.reduce((acc, d) => acc + d.valorTotal, 0);
+    const linhas = doMes.length
+      ? doMes.map(d => `<div class="cat-linha">
           <span class="desc">${d.produto}${d.fixo ? ' <span class="info">(fixo)</span>' : (d.total > 1 ? ` <span class="info">(${d.total}x)</span>` : '')}</span>
           <span class="info">${fmtMoeda(d.valorTotal)}</span>
         </div>`).join('')
       : '<div class="cat-linha"><span class="info">Nenhum gasto nessa categoria neste mês.</span></div>';
-    return `<div class="cat-item">
-      <div class="cat-header" data-idx="${idx}">
+    el.innerHTML = `<div class="cat-item">
+      <div class="cat-header" style="cursor:default">
         <span>${cat}</span>
-        <span style="display:flex;align-items:center;gap:10px"><span class="cat-total">${fmtMoeda(total)}</span><span class="seta">&#9656;</span></span>
+        <span class="cat-total">${fmtMoeda(total)}</span>
       </div>
-      <div class="cat-lista" id="catLista${idx}">${linhas}</div>
+      <div class="cat-lista aberto">${linhas}</div>
     </div>`;
-  }).join('');
+  };
 
-  document.querySelectorAll('.cat-header').forEach(h => {
-    h.onclick = function () {
-      const idx = this.dataset.idx;
-      this.classList.toggle('aberto');
-      document.getElementById('catLista' + idx).classList.toggle('aberto');
-    };
-  });
+  sel.onchange = desenharDetalhe;
+  desenharDetalhe();
 }
 
 /* ------------------------------ KPIs editáveis ------------------------------ */
