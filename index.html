@@ -175,7 +175,7 @@
       <button id="salvarGastoBtn">Adicionar</button>
     </div>
     <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-top:10px;color:var(--text-secondary)">
-      <input type="checkbox" id="fFixo" style="width:auto"> Gasto fixo (repete todo mês, ex: aluguel/parcela do apartamento)
+      <input type="checkbox" id="fFixo" style="width:auto"> Gasto recorrente (repete todo mês, ex: aluguel/financiamento da casa)
     </label>
     <p id="formStatus"></p>
   </div>
@@ -324,7 +324,7 @@ function parseValorBR(str) {
 
 function parseLinha(row) {
   const parcelasRaw = String(row['Parcelas'] || '1').trim();
-  const fixo = parcelasRaw.toLowerCase() === 'fixo';
+  const fixo = parcelasRaw.toLowerCase() === 'recorrente';
   const total = fixo ? null : (parseInt(parcelasRaw) || 1);
   const valorTotal = parseValorBR(row['Valor']);
   const parcelaValor = fixo ? valorTotal : valorTotal / total;
@@ -344,7 +344,7 @@ function parseLinha(row) {
    Para cada compra parcelada ainda em aberto (atual < total),
    projeta as parcelas restantes nos meses seguintes ao mês da
    linha (Data), uma por mês, mesmo valor de "Parcela".
-   Gastos marcados como "Fixo" (Parcelas = "Fixo") repetem o valor
+   Gastos marcados como "Recorrente" (Parcelas = "Recorrente") repetem o valor
    total todo mês, do mês da Data até o limite do gráfico (ateData).
    Retorna: { 'YYYY-MM': { categoria: valor, ... } }
    ----------------------------------------------------------------- */
@@ -634,7 +634,7 @@ function renderDetalheCategorias() {
     const total = doMes.reduce((acc, d) => acc + d.valorTotal, 0);
     const linhas = doMes.length
       ? doMes.map(d => `<div class="cat-linha">
-          <span class="desc">${d.produto}${d.fixo ? ' <span class="info">(fixo)</span>' : (d.total > 1 ? ` <span class="info">(${d.total}x)</span>` : '')}</span>
+          <span class="desc">${d.produto}${d.fixo ? ' <span class="info">(recorrente)</span>' : (d.total > 1 ? ` <span class="info">(${d.total}x)</span>` : '')}</span>
           <span class="info">${fmtMoeda(d.valorTotal)}</span>
         </div>`).join('')
       : '<div class="cat-linha"><span class="info">Nenhum gasto nessa categoria neste mês.</span></div>';
@@ -733,7 +733,7 @@ document.getElementById('salvarGastoBtn').onclick = async () => {
         Valor: valor,
         MetodoPagamento: formaPagamento === 'Pix' ? 'PIX' : 'CREDITO',
         Cartao: formaPagamento === 'Pix' ? '' : formaPagamento,
-        Parcelas: fixo ? 'Fixo' : totalParcelas
+        Parcelas: fixo ? 'Recorrente' : totalParcelas
       })
     });
     status.textContent = 'Gasto adicionado.';
@@ -751,7 +751,7 @@ const DADOS_EXEMPLO = [
   { Descrição: 'Manutenção do carro', Categoria: 'Transporte', Tipo: 'saida', Data: '07-06-2026', Valor: '560', MetodoPagamento: 'CREDITO', Cartao: 'Caixa', Parcelas: '5' },
   { Descrição: 'Compra de livro e funko', Categoria: 'Lazer', Tipo: 'saida', Data: '27-04-2026', Valor: '258,5', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '5' },
   { Descrição: 'Compra na Riachuelo', Categoria: 'Pessoal', Tipo: 'saida', Data: '27-04-2026', Valor: '359,98', MetodoPagamento: 'CREDITO', Cartao: 'Nubank', Parcelas: '3' },
-  { Descrição: 'Parcela do apartamento', Categoria: 'Casa', Tipo: 'saida', Data: '01-01-2026', Valor: '1800', MetodoPagamento: 'PIX', Cartao: '', Parcelas: 'Fixo' }
+  { Descrição: 'Financiamento da casa', Categoria: 'Casa', Tipo: 'saida', Data: '01-01-2026', Valor: '1800', MetodoPagamento: 'PIX', Cartao: '', Parcelas: 'Recorrente' }
 ];
 
 /* ------------------------------ Carregamento ------------------------------ */
@@ -763,7 +763,7 @@ function carregarDados() {
   const aoTerminar = (rows) => {
     dados = rows.map(parseLinha).filter(r => r.produto)
       // Ignora lançamentos de teste/calibração anteriores a DATA_INICIO —
-      // mas mantém gastos "Fixo" mesmo que tenham começado antes, já que
+      // mas mantém gastos "Recorrente" mesmo que tenham começado antes, já que
       // são compromissos recorrentes ainda ativos.
       .filter(r => r.fixo || r.data >= DATA_INICIO);
     categorias = [...new Set([...CATEGORIAS_PADRAO, ...dados.map(d => d.onde)])];
