@@ -153,7 +153,10 @@
       <span class="month-label" id="monthLabel">—</span>
       <button id="nextMonth" aria-label="Próximo mês">&#8594;</button>
     </div>
-    <button id="novoGastoBtn">+ Novo gasto</button>
+    <div style="display:flex;gap:8px">
+      <button id="atualizarBtn" title="Recarregar dados da planilha" style="background:var(--surface-1);border:1px solid var(--border);border-radius:var(--radius);width:36px;height:36px;cursor:pointer;font-size:15px;color:var(--text-secondary)">&#8635;</button>
+      <button id="novoGastoBtn">+ Novo gasto</button>
+    </div>
   </div>
 
   <!-- Formulário retrátil: só aparece ao clicar em "+ Novo gasto" -->
@@ -682,6 +685,10 @@ document.getElementById('nextMonth').onclick = () => {
 };
 
 /* ------------------------------ Formulário novo gasto ------------------------------ */
+document.getElementById('atualizarBtn').onclick = () => {
+  carregarDados();
+};
+
 document.getElementById('novoGastoBtn').onclick = () => {
   const f = document.getElementById('novoGastoForm');
   f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
@@ -777,7 +784,12 @@ function carregarDados() {
     return;
   }
 
-  Papa.parse(CSV_URL, {
+  // Anti-cache: adiciona timestamp na URL pra evitar que o navegador reuse
+  // uma cópia antiga do CSV (o Google também pode levar alguns minutos pra
+  // refletir edições recentes na versão publicada)
+  const urlComCacheBust = CSV_URL + (CSV_URL.includes('?') ? '&' : '?') + '_=' + Date.now();
+
+  Papa.parse(urlComCacheBust, {
     download: true,
     header: true,
     complete: (results) => aoTerminar(results.data),
