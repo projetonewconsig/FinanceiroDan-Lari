@@ -328,14 +328,26 @@ function parseValorBR(str) {
 function parseLinha(row) {
   const parcelasRaw = String(row['Parcelas'] || '1').trim();
   const fixo = parcelasRaw.toLowerCase() === 'recorrente';
-  const total = fixo ? null : (parseInt(parcelasRaw) || 1);
+  let atual = 1, total = 1;
+  if (!fixo) {
+    if (parcelasRaw.includes('/')) {
+      // Formato "atual/total", ex: "2/3" = já na 2ª de 3 parcelas
+      const [a, t] = parcelasRaw.split('/');
+      atual = parseInt(a) || 1;
+      total = parseInt(t) || atual;
+    } else {
+      // Número simples = total de parcelas, compra recém-feita (atual = 1)
+      total = parseInt(parcelasRaw) || 1;
+      atual = 1;
+    }
+  }
   const valorTotal = parseValorBR(row['Valor']);
   const parcelaValor = fixo ? valorTotal : valorTotal / total;
   const data = parseData(row['Data']);
   return {
     produto: row['Descrição'] || row['Descricao'] || '',
     tipo: (row['Tipo'] || 'saida').toLowerCase(),
-    valorTotal, parcelaValor, atual: 1, total, fixo, data,
+    valorTotal, parcelaValor, atual, total, fixo, data,
     formaPag: row['MetodoPagamento'] || '',
     cartao: row['Cartao'] || row['Cartão'] || '',
     onde: row['Categoria'] || 'Outros'
