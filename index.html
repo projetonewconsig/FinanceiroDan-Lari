@@ -146,23 +146,7 @@
 </head>
 <body>
 
-<div id="loginScreen" style="display:flex;min-height:90vh;align-items:center;justify-content:center;padding:16px">
-  <div style="background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:28px;width:100%;max-width:340px">
-    <p style="font-size:16px;font-weight:600;margin:0 0 4px">Painel Financeiro</p>
-    <p style="font-size:13px;color:var(--text-secondary);margin:0 0 20px">Entre com seu e-mail e senha</p>
-    <label style="font-size:12px;color:var(--text-muted)">E-mail</label>
-    <input id="loginEmail" type="email" style="width:100%;padding:9px 10px;margin:4px 0 12px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-    <label style="font-size:12px;color:var(--text-muted)">Senha</label>
-    <input id="loginSenha" type="password" style="width:100%;padding:9px 10px;margin:4px 0 16px;border:1px solid var(--border);border-radius:8px;font-size:14px">
-    <button id="loginBtn" style="width:100%;padding:10px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;cursor:pointer;font-weight:500">Entrar</button>
-    <p id="loginErro" style="font-size:12px;color:var(--red);margin:10px 0 0;display:none">E-mail ou senha incorretos.</p>
-  </div>
-</div>
-
-<div class="wrap" style="display:none">
-  <div style="display:flex;justify-content:flex-end;margin-bottom:4px">
-    <button id="logoutBtn" style="border:none;background:none;color:var(--text-muted);font-size:12px;cursor:pointer;text-decoration:underline">Sair</button>
-  </div>
+<div class="wrap">
 
   <div class="header-row">
     <div class="month-nav">
@@ -509,12 +493,12 @@ async function renderObjetivos() {
   const { data: list, error } = await sb.from('objetivos').select('*').order('id');
   if (error) { console.error('Erro ao buscar objetivos:', error); return; }
 
-  // Gera uma URL temporária (assinada) pra cada foto, já que o bucket é privado
-  const comFotos = await Promise.all(list.map(async (o) => {
+  // Monta o link público de cada foto (bucket é público, sem necessidade de login)
+  const comFotos = list.map((o) => {
     if (!o.imagem_url) return { ...o, fotoUrl: null };
-    const { data } = await sb.storage.from('objetivos-fotos').createSignedUrl(o.imagem_url, 3600);
-    return { ...o, fotoUrl: data ? data.signedUrl : null };
-  }));
+    const { data } = sb.storage.from('objetivos-fotos').getPublicUrl(o.imagem_url);
+    return { ...o, fotoUrl: data ? data.publicUrl : null };
+  });
 
   document.getElementById('objList').innerHTML = comFotos.map((o) => {
     const pct = Math.min(100, Math.round((o.guardado / o.meta) * 100));
@@ -864,43 +848,9 @@ function carregarDados() {
   });
 }
 
-/* ------------------------------ Login (Supabase Auth) ------------------------------ */
-function mostrarLogin() {
-  document.getElementById('loginScreen').style.display = 'flex';
-  document.querySelector('.wrap').style.display = 'none';
-}
-function mostrarDashboard() {
-  document.getElementById('loginScreen').style.display = 'none';
-  document.querySelector('.wrap').style.display = 'block';
-  carregarDados();
-  carregarReserva();
-}
-async function verificarSessao() {
-  const { data: { session } } = await sb.auth.getSession();
-  session ? mostrarDashboard() : mostrarLogin();
-}
-
-document.getElementById('loginBtn').onclick = async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  const senha = document.getElementById('loginSenha').value;
-  const erroEl = document.getElementById('loginErro');
-  erroEl.style.display = 'none';
-  const { error } = await sb.auth.signInWithPassword({ email, password: senha });
-  if (error) {
-    erroEl.textContent = 'Erro: ' + error.message; // mensagem real, temporário pra diagnóstico
-    erroEl.style.display = 'block';
-    return;
-  }
-  mostrarDashboard();
-};
-document.getElementById('loginSenha').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });
-
-document.getElementById('logoutBtn').onclick = async () => {
-  await sb.auth.signOut();
-  mostrarLogin();
-};
-
-verificarSessao();
+/* ------------------------------ Inicialização ------------------------------ */
+carregarDados();
+carregarReserva();
 </script>
 </body>
 </html>
