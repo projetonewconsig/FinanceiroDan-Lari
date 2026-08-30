@@ -256,6 +256,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 /* =================================================================
    CONFIGURAÇÃO
@@ -269,6 +270,14 @@
    ================================================================= */
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRkd-V78VXrjBiR3DMFXDapRVWzx4PuyCE4R4RmmxMCJbLbNQ6HJc6dFKFK9XPWSIzPHRwEEAWxngKK/pub?gid=0&single=true&output=csv"; // <- cole aqui o link publicado do Google Sheets
 const DATA_INICIO = new Date(2026, 8, 1); // 1º de setembro de 2026 — gastos antes disso (lançamentos de teste/calibração) são ignorados no painel
+
+// Supabase: guarda Objetivos, Limites de gastos e Reserva de Emergência
+// na nuvem (em vez de localStorage), pra funcionar igual em qualquer
+// navegador/dispositivo que o casal usar.
+const SUPABASE_URL = "https://sshjsupttckvcbbshld.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNzaGpzdXNwdHRja3ZjYmJzaGxkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgwNDAxOTIsImV4cCI6MjEwMzYxNjE5Mn0.zuDygSk_8CQZjzENUphSD_4sGVNeqrQXRFWGR3FxORM";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+let reservaValor = 0; // cache local do valor de reserva, atualizado ao carregar/editar
 const APPS_SCRIPT_URL = ""; // <- cole aqui a URL do Apps Script Web App
 
 const CORES = ['#2a78d6', '#1baf7a', '#eda100', '#e87ba4', '#4a3aa7', '#e34948', '#8a6d3b', '#3b8a8a', '#c26bcf', '#6ba33b', '#b3893b', '#3b5fb3', '#b33b6e'];
@@ -438,8 +447,7 @@ function render() {
   document.getElementById('kpiFixoMensalValue').textContent = fmtMoeda(somaProjecaoMes(mesSelecionado));
   document.getElementById('kpiFixoProximo').textContent = fmtMoeda(somaProjecaoMes(proximoMesObj));
 
-  const reserva = parseFloat(localStorage.getItem('kpiReserva') || '0');
-  document.getElementById('kpiReservaValue').textContent = fmtMoeda(reserva);
+  document.getElementById('kpiReservaValue').textContent = fmtMoeda(reservaValor);
 
   // Gráfico médio prazo
   const datasets = categorias.map((cat, idx) => ({
@@ -477,24 +485,23 @@ function render() {
   renderDetalheCategorias();
 }
 
-/* ------------------------------ OBJETIVOS (localStorage por enquanto) ------------------------------ */
-function getObjetivos() { return JSON.parse(localStorage.getItem('objetivos') || '[]'); }
-function setObjetivos(list) { localStorage.setItem('objetivos', JSON.stringify(list)); }
+/* ------------------------------ OBJETIVOS (Supabase) ------------------------------ */
+async function renderObjetivos() {
+  const { data: list, error } = await sb.from('objetivos').select('*').order('id');
+  if (error) { console.error('Erro ao buscar objetivos:', error); return; }
 
-function renderObjetivos() {
-  const list = getObjetivos();
-  document.getElementById('objList').innerHTML = list.map((o, idx) => {
+  document.getElementById('objList').innerHTML = list.map((o) => {
     const pct = Math.min(100, Math.round((o.guardado / o.meta) * 100));
     return `<div class="obj-card">
       <div class="obj-top">
         <span>${o.nome}</span>
         <span style="display:flex;align-items:center;gap:8px">
           <span class="pct">${pct}%</span>
-          <button class="obj-excluir" data-idx="${idx}" title="Excluir objetivo" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
+          <button class="obj-excluir" data-id="${o.id}" title="Excluir objetivo" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
         </span>
       </div>
       <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
-      <div class="obj-values" data-idx="${idx}" style="cursor:pointer" title="Clique para editar o valor guardado">
+      <div class="obj-values" data-id="${o.id}" data-guardado="${o.guardado}" style="cursor:pointer" title="Clique para editar o valor guardado">
         <span class="obj-guardado">${fmtMoeda(o.guardado)}</span> / ${fmtMoeda(o.meta)} <span style="text-decoration:underline">editar</span>
       </div>
     </div>`;
@@ -502,13 +509,11 @@ function renderObjetivos() {
 
   // Excluir objetivo
   document.querySelectorAll('.obj-excluir').forEach(btn => {
-    btn.onclick = function (e) {
+    btn.onclick = async function (e) {
       e.stopPropagation();
-      const idx = parseInt(this.dataset.idx);
+      const id = this.dataset.id;
       if (!confirm('Excluir este objetivo?')) return;
-      const l = getObjetivos();
-      l.splice(idx, 1);
-      setObjetivos(l);
+      await sb.from('objetivos').delete().eq('id', id);
       renderObjetivos();
     };
   });
@@ -516,18 +521,15 @@ function renderObjetivos() {
   // Clique no valor guardado -> vira input editável
   document.querySelectorAll('.obj-values').forEach(el => {
     el.onclick = function () {
-      const idx = parseInt(this.dataset.idx);
-      const listAtual = getObjetivos();
-      const atual = listAtual[idx].guardado;
+      const id = this.dataset.id;
+      const atual = parseFloat(this.dataset.guardado);
       this.innerHTML = `<input type="text" inputmode="decimal" value="${atual.toString().replace('.', ',')}" style="width:90px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px">`;
       const input = this.querySelector('input');
       input.focus();
       input.select();
-      const salvar = () => {
+      const salvar = async () => {
         const novo = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
-        const l = getObjetivos();
-        l[idx].guardado = novo;
-        setObjetivos(l);
+        await sb.from('objetivos').update({ guardado: novo }).eq('id', id);
         renderObjetivos();
       };
       input.onblur = salvar;
@@ -541,23 +543,18 @@ document.getElementById('novoObjBtn').onclick = () => {
   const f = document.getElementById('novoObjForm');
   f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
 };
-document.getElementById('salvarObjBtn').onclick = () => {
+document.getElementById('salvarObjBtn').onclick = async () => {
   const nome = document.getElementById('oNome').value.trim();
   const meta = parseFloat(document.getElementById('oMeta').value.replace(',', '.'));
   if (!nome || !meta) return;
-  const list = getObjetivos();
-  list.push({ nome, meta, guardado: 0 });
-  setObjetivos(list);
+  await sb.from('objetivos').insert({ nome, meta, guardado: 0 });
   document.getElementById('oNome').value = '';
   document.getElementById('oMeta').value = '';
   document.getElementById('novoObjForm').style.display = 'none';
   renderObjetivos();
 };
 
-/* ------------------------------ Limites de gastos (localStorage) ------------------------------ */
-function getLimites() { return JSON.parse(localStorage.getItem('limites') || '[]'); }
-function setLimites(list) { localStorage.setItem('limites', JSON.stringify(list)); }
-
+/* ------------------------------ Limites de gastos (Supabase) ------------------------------ */
 function gastoDoTermo(termo, mes) {
   const t = termo.trim().toLowerCase();
   return dados
@@ -568,17 +565,19 @@ function gastoDoTermo(termo, mes) {
     .reduce((acc, p) => acc + p.valor, 0);
 }
 
-function renderLimites() {
-  const list = getLimites();
-  document.getElementById('limitesList').innerHTML = list.map((l, idx) => {
+async function renderLimites() {
+  const { data: list, error } = await sb.from('limites').select('*').order('id');
+  if (error) { console.error('Erro ao buscar limites:', error); return; }
+
+  document.getElementById('limitesList').innerHTML = list.map((l) => {
     const gasto = gastoDoTermo(l.termo, mesSelecionado);
     const pct = Math.min(100, Math.round((gasto / l.limite) * 100));
     const estourou = gasto > l.limite;
     const cor = estourou ? 'var(--red)' : (pct >= 80 ? 'var(--amber)' : 'var(--accent)');
-    return `<div class="kpi-card" style="position:relative" id="limiteCard${idx}">
+    return `<div class="kpi-card" style="position:relative" id="limiteCard${l.id}">
       <div style="position:absolute;top:10px;right:10px;display:flex;gap:8px">
-        <button class="limite-editar" data-idx="${idx}" title="Editar limite" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;text-decoration:underline">editar</button>
-        <button class="limite-excluir" data-idx="${idx}" title="Excluir limite" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
+        <button class="limite-editar" data-id="${l.id}" title="Editar limite" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:12px;padding:0;text-decoration:underline">editar</button>
+        <button class="limite-excluir" data-id="${l.id}" title="Excluir limite" style="border:none;background:none;color:var(--text-muted);cursor:pointer;font-size:14px;padding:0">&times;</button>
       </div>
       <p class="label">${l.nome}</p>
       <p class="value" style="font-size:16px;color:${cor}">${fmtMoeda(gasto)} <span style="font-size:12px;color:var(--text-muted);font-weight:400">/ ${fmtMoeda(l.limite)}</span></p>
@@ -587,38 +586,34 @@ function renderLimites() {
   }).join('') || '<p style="font-size:13px;color:var(--text-muted);grid-column:1/-1">Nenhum limite cadastrado ainda.</p>';
 
   document.querySelectorAll('.limite-excluir').forEach(btn => {
-    btn.onclick = function () {
-      const idx = parseInt(this.dataset.idx);
+    btn.onclick = async function () {
+      const id = this.dataset.id;
       if (!confirm('Excluir este limite?')) return;
-      const l = getLimites();
-      l.splice(idx, 1);
-      setLimites(l);
+      await sb.from('limites').delete().eq('id', id);
       renderLimites();
     };
   });
 
   document.querySelectorAll('.limite-editar').forEach(btn => {
-    btn.onclick = function () {
-      const idx = parseInt(this.dataset.idx);
-      const l = getLimites()[idx];
-      const card = document.getElementById('limiteCard' + idx);
+    btn.onclick = async function () {
+      const id = this.dataset.id;
+      const { data: l } = await sb.from('limites').select('*').eq('id', id).single();
+      const card = document.getElementById('limiteCard' + id);
       card.innerHTML = `
         <label style="font-size:11px;color:var(--text-muted)">Nome</label>
-        <input id="editNome${idx}" value="${l.nome}" style="width:100%;padding:5px 7px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        <input id="editNome${id}" value="${l.nome}" style="width:100%;padding:5px 7px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px;font-size:13px">
         <label style="font-size:11px;color:var(--text-muted)">Categoria/palavra-chave</label>
-        <input id="editTermo${idx}" value="${l.termo}" style="width:100%;padding:5px 7px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        <input id="editTermo${id}" value="${l.termo}" style="width:100%;padding:5px 7px;margin-bottom:6px;border:1px solid var(--border);border-radius:6px;font-size:13px">
         <label style="font-size:11px;color:var(--text-muted)">Limite mensal</label>
-        <input id="editLimite${idx}" value="${l.limite.toString().replace('.', ',')}" style="width:100%;padding:5px 7px;margin-bottom:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
-        <button id="salvarEdicaoLimite${idx}" style="width:100%;padding:7px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px">Salvar</button>
+        <input id="editLimite${id}" value="${l.limite.toString().replace('.', ',')}" style="width:100%;padding:5px 7px;margin-bottom:8px;border:1px solid var(--border);border-radius:6px;font-size:13px">
+        <button id="salvarEdicaoLimite${id}" style="width:100%;padding:7px;border:none;border-radius:6px;background:var(--accent);color:#fff;cursor:pointer;font-size:13px">Salvar</button>
       `;
-      document.getElementById('salvarEdicaoLimite' + idx).onclick = () => {
-        const nome = document.getElementById('editNome' + idx).value.trim();
-        const termo = document.getElementById('editTermo' + idx).value.trim();
-        const limite = parseFloat(document.getElementById('editLimite' + idx).value.replace(/\./g, '').replace(',', '.'));
+      document.getElementById('salvarEdicaoLimite' + id).onclick = async () => {
+        const nome = document.getElementById('editNome' + id).value.trim();
+        const termo = document.getElementById('editTermo' + id).value.trim();
+        const limite = parseFloat(document.getElementById('editLimite' + id).value.replace(/\./g, '').replace(',', '.'));
         if (!nome || !termo || !limite) return;
-        const listAtual = getLimites();
-        listAtual[idx] = { nome, termo, limite };
-        setLimites(listAtual);
+        await sb.from('limites').update({ nome, termo, limite }).eq('id', id);
         renderLimites();
       };
     };
@@ -629,14 +624,12 @@ document.getElementById('novoLimiteBtn').onclick = () => {
   const f = document.getElementById('novoLimiteForm');
   f.style.display = f.style.display === 'none' || !f.style.display ? 'block' : 'none';
 };
-document.getElementById('salvarLimiteBtn').onclick = () => {
+document.getElementById('salvarLimiteBtn').onclick = async () => {
   const nome = document.getElementById('lNome').value.trim();
   const termo = document.getElementById('lTermo').value.trim();
   const limite = parseFloat(document.getElementById('lLimite').value.replace(/\./g, '').replace(',', '.'));
   if (!nome || !termo || !limite) return;
-  const list = getLimites();
-  list.push({ nome, termo, limite });
-  setLimites(list);
+  await sb.from('limites').insert({ nome, termo, limite });
   document.getElementById('lNome').value = '';
   document.getElementById('lTermo').value = '';
   document.getElementById('lLimite').value = '';
@@ -683,25 +676,28 @@ function renderDetalheCategorias() {
   desenharDetalhe();
 }
 
-/* ------------------------------ KPIs editáveis ------------------------------ */
-function tornarEditavel(cardId, valueId, storageKey) {
-  document.getElementById(cardId).onclick = function () {
-    const valEl = document.getElementById(valueId);
-    const atual = parseFloat(localStorage.getItem(storageKey) || '0');
-    valEl.innerHTML = `<input type="text" inputmode="decimal" value="${atual.toString().replace('.', ',')}">`;
-    const input = valEl.querySelector('input');
-    input.focus();
-    input.select();
-    const salvar = () => {
-      const novo = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
-      localStorage.setItem(storageKey, novo);
-      render();
-    };
-    input.onblur = salvar;
-    input.onkeydown = e => { if (e.key === 'Enter') input.blur(); };
-  };
+/* ------------------------------ Reserva de Emergência (Supabase) ------------------------------ */
+async function carregarReserva() {
+  const { data, error } = await sb.from('configuracoes').select('valor').eq('chave', 'reserva_emergencia').single();
+  if (!error && data) reservaValor = data.valor;
+  document.getElementById('kpiReservaValue').textContent = fmtMoeda(reservaValor);
 }
-tornarEditavel('kpiReserva', 'kpiReservaValue', 'kpiReserva');
+
+document.getElementById('kpiReserva').onclick = function () {
+  const valEl = document.getElementById('kpiReservaValue');
+  valEl.innerHTML = `<input type="text" inputmode="decimal" value="${reservaValor.toString().replace('.', ',')}">`;
+  const input = valEl.querySelector('input');
+  input.focus();
+  input.select();
+  const salvar = async () => {
+    const novo = parseFloat(input.value.replace(/\./g, '').replace(',', '.')) || 0;
+    reservaValor = novo;
+    await sb.from('configuracoes').upsert({ chave: 'reserva_emergencia', valor: novo });
+    render();
+  };
+  input.onblur = salvar;
+  input.onkeydown = e => { if (e.key === 'Enter') input.blur(); };
+};
 
 /* ------------------------------ Navegação de mês ------------------------------ */
 document.getElementById('prevMonth').onclick = () => {
@@ -832,6 +828,7 @@ function carregarDados() {
 }
 
 carregarDados();
+carregarReserva();
 </script>
 </body>
 </html>
