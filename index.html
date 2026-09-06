@@ -209,6 +209,12 @@
       </div>
     </div>
 
+    <div style="margin:28px 0">
+      <p class="section-title">Gastos por cartão</p>
+      <select id="cartaoSelect" style="width:100%;max-width:280px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:var(--surface-1);margin-bottom:12px"></select>
+      <div id="cartaoDetalhe"></div>
+    </div>
+
     <div style="margin-bottom:28px">
       <div class="obj-header">
         <p class="section-title" style="margin:0">Limites de gastos</p>
@@ -486,6 +492,7 @@ function render() {
   renderObjetivos();
   renderLimites();
   renderDetalheCategorias();
+  renderDetalheCartoes();
 }
 
 /* ------------------------------ OBJETIVOS (Supabase) ------------------------------ */
@@ -695,6 +702,47 @@ function renderDetalheCategorias() {
 
   sel.onchange = desenharDetalhe;
   desenharDetalhe();
+}
+
+/* ------------------------------ Detalhamento por cartão ------------------------------ */
+function renderDetalheCartoes() {
+  const sel = document.getElementById('cartaoSelect');
+  const el = document.getElementById('cartaoDetalhe');
+  if (!sel || !el) return;
+
+  const cartoes = [...new Set(dados.map(d => d.cartao).filter(c => c))];
+  if (cartoes.length === 0) { el.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">Sem dados ainda.</p>'; return; }
+
+  const anterior = sel.value;
+  sel.innerHTML = cartoes.map(c => `<option value="${c}">${c}</option>`).join('');
+  sel.value = cartoes.includes(anterior) ? anterior : cartoes[0];
+
+  const desenharCartao = () => {
+    const cartao = sel.value;
+    const itens = dados.filter(d => d.tipo !== 'entrada' && d.cartao === cartao);
+    const totalGeral = itens.reduce((acc, d) => acc + d.valorTotal, 0);
+    const cabecalho = `<div class="cat-linha" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;font-size:11px;color:var(--text-muted);font-weight:600">
+      <span>Descrição</span><span>Custo total</span><span>Parcela</span><span>Parcelas</span>
+    </div>`;
+    const linhas = itens.length
+      ? itens.map(d => `<div class="cat-linha" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px">
+          <span class="desc">${d.produto}</span>
+          <span class="info">${fmtMoeda(d.valorTotal)}</span>
+          <span class="info">${d.fixo ? 'recorrente' : fmtMoeda(d.parcelaValor)}</span>
+          <span class="info">${d.fixo ? '—' : `${d.atual}/${d.total}`}</span>
+        </div>`).join('')
+      : '<div class="cat-linha"><span class="info">Nenhum gasto nesse cartão.</span></div>';
+    el.innerHTML = `<div class="cat-item">
+      <div class="cat-header" style="cursor:default">
+        <span>${cartao}</span>
+        <span class="cat-total">${fmtMoeda(totalGeral)}</span>
+      </div>
+      <div class="cat-lista aberto">${cabecalho}${linhas}</div>
+    </div>`;
+  };
+
+  sel.onchange = desenharCartao;
+  desenharCartao();
 }
 
 /* ------------------------------ Reserva de Emergência (Supabase) ------------------------------ */
