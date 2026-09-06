@@ -692,12 +692,19 @@ function renderDetalheCategorias() {
         </div>`).join('')
       : '<div class="cat-linha"><span class="info">Nenhum gasto nessa categoria neste mês.</span></div>';
     el.innerHTML = `<div class="cat-item">
-      <div class="cat-header" style="cursor:default">
+      <div class="cat-header" id="categoriaHeader" style="cursor:pointer">
         <span>${cat}</span>
-        <span class="cat-total">${fmtMoeda(total)}</span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <span class="cat-total">${fmtMoeda(total)}</span>
+          <span class="seta">&#9656;</span>
+        </span>
       </div>
-      <div class="cat-lista aberto">${linhas}</div>
+      <div class="cat-lista" id="categoriaLista">${linhas}</div>
     </div>`;
+    document.getElementById('categoriaHeader').onclick = function () {
+      this.classList.toggle('aberto');
+      document.getElementById('categoriaLista').classList.toggle('aberto');
+    };
   };
 
   sel.onchange = desenharDetalhe;
@@ -733,12 +740,19 @@ function renderDetalheCartoes() {
         </div>`).join('')
       : '<div class="cat-linha"><span class="info">Nenhum gasto nesse cartão.</span></div>';
     el.innerHTML = `<div class="cat-item">
-      <div class="cat-header" style="cursor:default">
+      <div class="cat-header" id="cartaoHeader" style="cursor:pointer">
         <span>${cartao}</span>
-        <span class="cat-total">${fmtMoeda(totalGeral)}</span>
+        <span style="display:flex;align-items:center;gap:10px">
+          <span class="cat-total">${fmtMoeda(totalGeral)}</span>
+          <span class="seta">&#9656;</span>
+        </span>
       </div>
-      <div class="cat-lista aberto">${cabecalho}${linhas}</div>
+      <div class="cat-lista" id="cartaoLista">${cabecalho}${linhas}</div>
     </div>`;
+    document.getElementById('cartaoHeader').onclick = function () {
+      this.classList.toggle('aberto');
+      document.getElementById('cartaoLista').classList.toggle('aberto');
+    };
   };
 
   sel.onchange = desenharCartao;
