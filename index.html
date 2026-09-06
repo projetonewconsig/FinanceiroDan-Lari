@@ -726,19 +726,22 @@ function renderDetalheCartoes() {
 
   const desenharCartao = () => {
     const cartao = sel.value;
-    const itens = dados.filter(d => d.tipo !== 'entrada' && d.cartao === cartao);
-    const totalGeral = itens.reduce((acc, d) => acc + d.valorTotal, 0);
+    const itens = dados
+      .filter(d => d.tipo !== 'entrada' && d.cartao === cartao)
+      .map(d => ({ d, p: parcelaNoMes(d, mesSelecionado) }))
+      .filter(x => x.p);
+    const totalGeral = itens.reduce((acc, x) => acc + x.p.valor, 0);
     const cabecalho = `<div class="cat-linha" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;font-size:11px;color:var(--text-muted);font-weight:600">
-      <span>Descrição</span><span>Custo total</span><span>Parcela</span><span>Parcelas</span>
+      <span>Descrição</span><span>Custo total</span><span>Parcela do mês</span><span>Parcelas</span>
     </div>`;
     const linhas = itens.length
-      ? itens.map(d => `<div class="cat-linha" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px">
-          <span class="desc">${d.produto}</span>
-          <span class="info">${fmtMoeda(d.valorTotal)}</span>
-          <span class="info">${d.fixo ? 'recorrente' : fmtMoeda(d.parcelaValor)}</span>
-          <span class="info">${d.fixo ? '—' : `${d.atual}/${d.total}`}</span>
+      ? itens.map(x => `<div class="cat-linha" style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px">
+          <span class="desc">${x.d.produto}</span>
+          <span class="info">${fmtMoeda(x.d.valorTotal)}</span>
+          <span class="info">${fmtMoeda(x.p.valor)}</span>
+          <span class="info">${x.p.label || '1/1'}</span>
         </div>`).join('')
-      : '<div class="cat-linha"><span class="info">Nenhum gasto nesse cartão.</span></div>';
+      : '<div class="cat-linha"><span class="info">Nenhum gasto nesse cartão neste mês.</span></div>';
     el.innerHTML = `<div class="cat-item">
       <div class="cat-header" id="cartaoHeader" style="cursor:pointer">
         <span>${cartao}</span>
